@@ -62,7 +62,6 @@ public class ImageTexture implements AutoCloseable {
                 () -> "banner_designer_" + safeName,
                 nativeImage
         );
-        tex.setFilter(true, false);
 
         MinecraftClient.getInstance().getTextureManager().registerTexture(id, tex);
 
