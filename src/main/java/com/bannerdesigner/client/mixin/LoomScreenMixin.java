@@ -26,6 +26,6 @@ public abstract class LoomScreenMixin {
                 )
         ).dimensions(8, self.height - 32, 140, 24).build();
 
-        self.addDrawableChild(designerButton);
+        ((ScreenInvoker) self).bannerDesigner$addDrawableChild(designerButton);
     }
 }
