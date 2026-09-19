@@ -22,11 +22,6 @@ public class ImageTexture implements AutoCloseable {
         this.height = height;
     }
 
-    /**
-     * Rescales the source image to fit within maxWidth x maxHeight (preserving aspect ratio),
-     * then uploads as a texture at that exact resolution. This lets the screen render
-     * the texture at 1:1 scale, avoiding matrix transforms entirely.
-     */
     public static ImageTexture fromBufferedImage(String name, BufferedImage source,
                                                   int maxWidth, int maxHeight) {
         int srcW = source.getWidth();
@@ -40,16 +35,7 @@ public class ImageTexture implements AutoCloseable {
         int targetW = Math.max(1, (int) (srcW * scale));
         int targetH = Math.max(1, (int) (srcH * scale));
 
-        BufferedImage scaled = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = scaled.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-        g.setRenderingHint(RenderingHints.KEY_RENDERING,
-                RenderingHints.VALUE_RENDER_QUALITY);
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                RenderingHints.VALUE_ANTIALIAS_ON);
-        g.drawImage(source, 0, 0, targetW, targetH, null);
-        g.dispose();
+        BufferedImage scaled = smoothDownscale(source, targetW, targetH);
 
         NativeImage nativeImage = new NativeImage(NativeImage.Format.RGBA, targetW, targetH, false);
         for (int y = 0; y < targetH; y++) {
@@ -69,6 +55,44 @@ public class ImageTexture implements AutoCloseable {
         MinecraftClient.getInstance().getTextureManager().registerTexture(id, tex);
 
         return new ImageTexture(id, targetW, targetH);
+    }
+
+    /**
+     * Progressive downscale: repeatedly halve the image until it is close to
+     * the target size, then do a final resize. This preserves far more detail
+     * than a single-pass downscale.
+     */
+    private static BufferedImage smoothDownscale(BufferedImage src, int targetW, int targetH) {
+        BufferedImage current = src;
+        while (current.getWidth() / 2 >= targetW && current.getHeight() / 2 >= targetH) {
+            int halfW = current.getWidth() / 2;
+            int halfH = current.getHeight() / 2;
+            BufferedImage half = new BufferedImage(halfW, halfH, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = half.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING,
+                    RenderingHints.VALUE_RENDER_QUALITY);
+            g.drawImage(current, 0, 0, halfW, halfH, null);
+            g.dispose();
+            current = half;
+        }
+
+        if (current.getWidth() == targetW && current.getHeight() == targetH) {
+            return current;
+        }
+
+        BufferedImage out = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = out.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.setRenderingHint(RenderingHints.KEY_RENDERING,
+                RenderingHints.VALUE_RENDER_QUALITY);
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                RenderingHints.VALUE_ANTIALIAS_ON);
+        g.drawImage(current, 0, 0, targetW, targetH, null);
+        g.dispose();
+        return out;
     }
 
     public Identifier identifier() { return identifier; }
