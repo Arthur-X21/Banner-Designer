@@ -1,8 +1,8 @@
 package com.bannerdesigner.client.image;
 
 import com.bannerdesigner.client.BannerDesignerClient;
-import net.minecraft.client.texture.NativeImage;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.texture.NativeImage;
 import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.util.Identifier;
 
@@ -34,7 +34,10 @@ public class ImageTexture implements AutoCloseable {
         String safeName = name.replaceAll("[^a-zA-Z0-9_]", "_").toLowerCase();
         Identifier id = Identifier.of("banner-designer", "dynamic/" + safeName + "_" + System.nanoTime());
 
-        NativeImageBackedTexture tex = new NativeImageBackedTexture(nativeImage);
+        NativeImageBackedTexture tex = new NativeImageBackedTexture(
+                () -> "banner_designer_" + safeName,
+                nativeImage
+        );
         MinecraftClient.getInstance().getTextureManager().registerTexture(id, tex);
 
         return new ImageTexture(id, w, h);
