@@ -14,6 +14,7 @@ import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.screen.LoomScreenHandler;
 import net.minecraft.text.Text;
 
@@ -195,14 +196,21 @@ public class BannerDesignerScreen extends Screen {
         int drawX = areaX + (areaW - drawW) / 2;
         int drawY = areaY + (areaH - drawH) / 2;
 
+        MatrixStack matrices = context.getMatrices();
+        matrices.push();
+        matrices.translate((float) drawX, (float) drawY, 0.0f);
+        matrices.scale(scale, scale, 1.0f);
+
         context.drawTexture(
                 RenderPipelines.GUI_TEXTURED,
                 tex.identifier(),
-                drawX, drawY,
+                0, 0,
                 0.0f, 0.0f,
-                drawW, drawH,
+                texW, texH,
                 texW, texH
         );
+
+        matrices.pop();
     }
 
     private void destroyTextures() {
