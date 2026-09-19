@@ -6,6 +6,7 @@ import com.bannerdesigner.client.banner.BannerDefinition;
 import com.bannerdesigner.client.banner.BannerLayer;
 import com.bannerdesigner.client.banner.BannerPatternInfo;
 import com.bannerdesigner.client.banner.BannerRenderer2D;
+import com.bannerdesigner.client.config.ConfigManager;
 import net.minecraft.util.DyeColor;
 
 import java.awt.image.BufferedImage;
@@ -17,45 +18,80 @@ public final class SimpleSolver {
 
     private SimpleSolver() {}
 
-    public static List<BannerCandidate> solve(BufferedImage target, AnalysisResult analysis, int maxCandidates) {
-        List<BannerCandidate> candidates = new ArrayList<>();
+    public static List<BannerCandidate> solve(BufferedImage target, AnalysisResult analysis,
+                                              int maxCandidates) {
+        List<BannerCandidate> pool = new ArrayList<>();
         List<DyeColor> colors = analysis.dominantColors();
+        if (colors.isEmpty()) colors.add(DyeColor.WHITE);
 
-        DyeColor base = colors.get(0);
+        int maxLayers = ConfigManager.solverMaxLayers();
 
-        for (String pattern : BannerPatternInfo.COMMON_PATTERNS) {
-            for (int i = 1; i < Math.min(colors.size(), 4); i++) {
-                DyeColor layerColor = colors.get(i);
-                if (layerColor == base) continue;
+        // Single-layer search
+        for (DyeColor base : colors.subList(0, Math.min(2, colors.size()))) {
+            BannerDefinition baseDef = new BannerDefinition(base, List.of());
+            pool.add(new BannerCandidate(baseDef, score(target, baseDef)));
 
-                BannerLayer layer = new BannerLayer(pattern, layerColor, 0);
-                BannerDefinition def = new BannerDefinition(base, List.of(layer));
-
-                BufferedImage rendered = BannerRenderer2D.render(def);
-                double score = ColorAnalyzer.similarity(target, rendered);
-                candidates.add(new BannerCandidate(def, score));
+            for (String pattern : BannerPatternInfo.COMMON_PATTERNS) {
+                for (int i = 0; i < colors.size(); i++) {
+                    DyeColor lc = colors.get(i);
+                    if (lc == base) continue;
+                    BannerDefinition def = new BannerDefinition(base,
+                            List.of(new BannerLayer(pattern, lc, 0)));
+                    pool.add(new BannerCandidate(def, score(target, def)));
+                }
             }
         }
 
-        if (colors.size() >= 2) {
-            DyeColor c1 = colors.get(1);
-            for (String pattern1 : new String[]{"stripe_bottom", "stripe_top", "border", "circle", "creeper"}) {
-                BannerDefinition def = new BannerDefinition(base,
-                        List.of(new BannerLayer(pattern1, c1, 0)));
-                BufferedImage rendered = BannerRenderer2D.render(def);
-                double score = ColorAnalyzer.similarity(target, rendered);
-                candidates.add(new BannerCandidate(def, score));
+        pool.sort(Comparator.comparingDouble(BannerCandidate::score).reversed());
+
+        // Multi-layer expansion from top candidates
+        if (maxLayers > 1) {
+            List<BannerCandidate> top = new ArrayList<>(pool.subList(0, Math.min(10, pool.size())));
+            for (BannerCandidate c : top) {
+                BannerDefinition baseDef = c.definition();
+                if (baseDef.layerCount() >= maxLayers) continue;
+
+                for (String pattern : BannerPatternInfo.COMMON_PATTERNS) {
+                    for (DyeColor lc : colors.subList(0, Math.min(3, colors.size()))) {
+                        BannerDefinition extended = baseDef.withLayer(
+                                new BannerLayer(pattern, lc, baseDef.layerCount()));
+                        if (extended.layerCount() > baseDef.layerCount()) {
+                            pool.add(new BannerCandidate(extended, score(target, extended)));
+                        }
+                    }
+                }
             }
         }
 
-        BannerDefinition baseOnly = new BannerDefinition(base, List.of());
-        BufferedImage baseRendered = BannerRenderer2D.render(baseOnly);
-        candidates.add(new BannerCandidate(baseOnly, ColorAnalyzer.similarity(target, baseRendered)));
+        pool.sort(Comparator.comparingDouble(BannerCandidate::score).reversed());
 
-        candidates.sort(Comparator.comparingDouble(BannerCandidate::score).reversed());
+        // Deduplicate by definition string
+        List<BannerCandidate> unique = new ArrayList<>();
+        for (BannerCandidate c : pool) {
+            boolean dup = false;
+            for (BannerCandidate u : unique) {
+                if (sameDef(u.definition(), c.definition())) { dup = true; break; }
+            }
+            if (!dup) unique.add(c);
+            if (unique.size() >= maxCandidates) break;
+        }
+        return unique;
+    }
 
-        return candidates.size() > maxCandidates
-                ? candidates.subList(0, maxCandidates)
-                : candidates;
+    private static double score(BufferedImage target, BannerDefinition def) {
+        BufferedImage rendered = BannerRenderer2D.render(def);
+        return ColorAnalyzer.similarity(target, rendered);
+    }
+
+    private static boolean sameDef(BannerDefinition a, BannerDefinition b) {
+        if (a.baseColor() != b.baseColor()) return false;
+        if (a.layerCount() != b.layerCount()) return false;
+        for (int i = 0; i < a.layerCount(); i++) {
+            BannerLayer la = a.layers().get(i);
+            BannerLayer lb = b.layers().get(i);
+            if (!la.patternId().equals(lb.patternId())) return false;
+            if (la.color() != lb.color()) return false;
+        }
+        return true;
     }
 }

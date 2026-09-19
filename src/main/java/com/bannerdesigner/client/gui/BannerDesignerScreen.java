@@ -3,7 +3,9 @@ package com.bannerdesigner.client.gui;
 import com.bannerdesigner.client.analysis.AnalysisResult;
 import com.bannerdesigner.client.analysis.ColorAnalyzer;
 import com.bannerdesigner.client.banner.BannerDefinition;
+import com.bannerdesigner.client.banner.BannerLayer;
 import com.bannerdesigner.client.banner.BannerRenderer2D;
+import com.bannerdesigner.client.cache.CacheManager;
 import com.bannerdesigner.client.image.ImageLoader;
 import com.bannerdesigner.client.image.ImageTexture;
 import com.bannerdesigner.client.preset.PresetEntry;
@@ -18,6 +20,7 @@ import net.minecraft.screen.LoomScreenHandler;
 import net.minecraft.text.Text;
 
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
 import java.util.List;
 
 public class BannerDesignerScreen extends Screen {
@@ -25,6 +28,7 @@ public class BannerDesignerScreen extends Screen {
     private static final int COLOR_WHITE = 0xFFFFFFFF;
     private static final int COLOR_GRAY  = 0xFFAAAAAA;
     private static final int COLOR_GREEN = 0xFF55FF55;
+    private static final int COLOR_YELLOW = 0xFFFFFF55;
 
     private static final int SIDEBAR_X = 10;
     private static final int SIDEBAR_WIDTH = 150;
@@ -34,15 +38,16 @@ public class BannerDesignerScreen extends Screen {
 
     private static final int IMAGE_X = 175;
     private static final int PREVIEW_TOP = 45;
-    private static final int PREVIEW_BOTTOM = 55;
+    private static final int PREVIEW_BOTTOM = 90;
     private static final int PANEL_GAP = 10;
 
     private final LoomScreenHandler loomHandler;
     private ImageTexture currentTexture;
     private ImageTexture bannerTexture;
     private BufferedImage currentImage;
-    private BannerDefinition currentBanner;
-    private double currentScore;
+    private byte[] currentImageBytes;
+    private List<BannerCandidate> candidates = new ArrayList<>();
+    private int selectedCandidate = 0;
     private String statusMessage;
 
     public BannerDesignerScreen(LoomScreenHandler loomHandler) {
@@ -57,7 +62,7 @@ public class BannerDesignerScreen extends Screen {
         PresetManager.reload();
         List<PresetEntry> presets = PresetManager.snapshot();
 
-        int availableHeight = this.height - SIDEBAR_TOP - 90;
+        int availableHeight = this.height - SIDEBAR_TOP - 130;
         int perButton = PRESET_BUTTON_HEIGHT + PRESET_BUTTON_SPACING;
         int maxVisible = Math.max(1, availableHeight / perButton);
         int visibleCount = Math.min(presets.size(), maxVisible);
@@ -74,7 +79,7 @@ public class BannerDesignerScreen extends Screen {
             this.addDrawableChild(button);
         }
 
-        int analyzeY = this.height - 82;
+        int analyzeY = this.height - 92;
 
         this.addDrawableChild(ButtonWidget.builder(
                 Text.translatable("bannerdesigner.button.analyze"),
@@ -105,12 +110,15 @@ public class BannerDesignerScreen extends Screen {
 
     private void onPresetSelected(PresetEntry preset) {
         destroyTextures();
+        this.candidates.clear();
+        this.selectedCandidate = 0;
 
         BufferedImage img = ImageLoader.load(preset.path());
         if (img == null) {
             this.statusMessage = "Failed to load: " + preset.name();
         } else {
             this.currentImage = img;
+            this.currentImageBytes = CacheManager.hashBytes(preset.name().getBytes()).getBytes();
             int pw = panelWidth();
             int ph = panelHeight();
             this.currentTexture = ImageTexture.fromBufferedImage(preset.name(), img, pw, ph);
@@ -129,28 +137,43 @@ public class BannerDesignerScreen extends Screen {
 
         try {
             AnalysisResult analysis = ColorAnalyzer.analyze(this.currentImage);
-            List<BannerCandidate> candidates = SimpleSolver.solve(this.currentImage, analysis, 1);
-            if (candidates.isEmpty()) {
+            this.candidates = SimpleSolver.solve(
+                    this.currentImage, analysis,
+                    com.bannerdesigner.client.config.ConfigManager.maxCandidates());
+            this.selectedCandidate = 0;
+
+            if (this.candidates.isEmpty()) {
                 sendChat("No candidates found.");
                 return;
             }
-            BannerCandidate best = candidates.get(0);
-            this.currentBanner = best.definition();
-            this.currentScore = best.score();
 
-            if (this.bannerTexture != null) {
-                this.bannerTexture.close();
-                this.bannerTexture = null;
-            }
-            BufferedImage rendered = BannerRenderer2D.render(this.currentBanner);
-            int pw = panelWidth();
-            int ph = panelHeight();
-            this.bannerTexture = ImageTexture.fromBufferedImage("banner_preview", rendered, pw, ph);
-
-            sendChat(String.format("Analyzed. Match: %.1f%%", this.currentScore * 100.0));
+            updateBannerTexture();
+            BannerCandidate best = this.candidates.get(0);
+            sendChat(String.format("Analyzed. Match: %.1f%% (top of %d)",
+                    best.score() * 100.0, this.candidates.size()));
         } catch (Exception e) {
             sendChat("Analysis failed: " + e.getMessage());
         }
+    }
+
+    private void updateBannerTexture() {
+        if (this.bannerTexture != null) {
+            this.bannerTexture.close();
+            this.bannerTexture = null;
+        }
+        if (this.candidates.isEmpty()) return;
+
+        BannerCandidate c = this.candidates.get(this.selectedCandidate);
+        BufferedImage rendered = BannerRenderer2D.render(c.definition());
+        int pw = panelWidth();
+        int ph = panelHeight();
+        this.bannerTexture = ImageTexture.fromBufferedImage("banner_preview", rendered, pw, ph);
+    }
+
+    private void selectCandidate(int index) {
+        if (index < 0 || index >= this.candidates.size()) return;
+        this.selectedCandidate = index;
+        updateBannerTexture();
     }
 
     private void sendChat(String msg) {
@@ -187,19 +210,66 @@ public class BannerDesignerScreen extends Screen {
             drawCentered(context, this.currentTexture, leftX, PREVIEW_TOP, pw, ph);
         }
 
-        if (this.bannerTexture != null) {
+        if (this.bannerTexture != null && !this.candidates.isEmpty()) {
             drawCentered(context, this.bannerTexture, rightX, PREVIEW_TOP, pw, ph);
-            Text score = Text.literal(String.format("Match: %.1f%%", this.currentScore * 100.0));
+
+            BannerCandidate c = this.candidates.get(this.selectedCandidate);
+            Text score = Text.literal(String.format("Match: %.1f%%  (#%d/%d)",
+                    c.score() * 100.0, this.selectedCandidate + 1, this.candidates.size()));
             context.drawCenteredTextWithShadow(this.textRenderer, score,
                     rightX + pw / 2, PREVIEW_TOP + ph + 4, COLOR_GREEN);
+
+            drawLayerInfo(context, rightX, PREVIEW_TOP + ph + 18, pw, c.definition());
+        }
+
+        // Candidate selector buttons at bottom of preview area
+        if (this.candidates.size() > 1) {
+            int btnY = PREVIEW_TOP + ph + 40;
+            int btnW = 30;
+            int total = this.candidates.size() * (btnW + 4) - 4;
+            int bx = rightX + (pw - total) / 2;
+            for (int i = 0; i < this.candidates.size(); i++) {
+                final int idx = i;
+                String label = "#" + (i + 1);
+                context.fill(bx, btnY, bx + btnW, btnY + 14,
+                        i == this.selectedCandidate ? 0xFF55AA55 : 0xFF333333);
+                context.drawCenteredTextWithShadow(this.textRenderer,
+                        Text.literal(label), bx + btnW / 2, btnY + 3,
+                        i == this.selectedCandidate ? COLOR_YELLOW : COLOR_WHITE);
+                bx += btnW + 4;
+            }
         }
     }
 
-    /**
-     * Draws the texture at its native size (1:1) centered within the given area.
-     * The texture itself was pre-scaled by ImageTexture.fromBufferedImage to fit
-     * within (areaW x areaH). No matrix transformations needed.
-     */
+    private void drawLayerInfo(DrawContext context, int x, int y, int w, BannerDefinition def) {
+        String baseLine = "Base: " + niceName(def.baseColor().getName());
+        context.drawCenteredTextWithShadow(this.textRenderer,
+                Text.literal(baseLine), x + w / 2, y, COLOR_GRAY);
+
+        int ly = y + 11;
+        int max = Math.min(def.layerCount(), 4);
+        for (int i = 0; i < max; i++) {
+            BannerLayer layer = def.layers().get(i);
+            String s = (i + 1) + ". " + niceName(layer.color().getName())
+                    + " " + niceName(layer.patternId());
+            context.drawCenteredTextWithShadow(this.textRenderer,
+                    Text.literal(s), x + w / 2, ly, COLOR_GRAY);
+            ly += 10;
+        }
+    }
+
+    private static String niceName(String id) {
+        String[] parts = id.split("_");
+        StringBuilder sb = new StringBuilder();
+        for (String p : parts) {
+            if (p.isEmpty()) continue;
+            sb.append(Character.toUpperCase(p.charAt(0)));
+            if (p.length() > 1) sb.append(p.substring(1));
+            sb.append(' ');
+        }
+        return sb.toString().trim();
+    }
+
     private void drawCentered(DrawContext context, ImageTexture tex,
                                int areaX, int areaY, int areaW, int areaH) {
         int texW = tex.width();
@@ -217,15 +287,32 @@ public class BannerDesignerScreen extends Screen {
         );
     }
 
+    @Override
+    public boolean mouseClicked(net.minecraft.client.gui.Click click, boolean doubled) {
+        if (click.button() == 0 && this.candidates.size() > 1) {
+            int pw = panelWidth();
+            int ph = panelHeight();
+            int rightX = IMAGE_X + pw + PANEL_GAP;
+            int btnY = PREVIEW_TOP + ph + 40;
+            int btnW = 30;
+            int total = this.candidates.size() * (btnW + 4) - 4;
+            int bx = rightX + (pw - total) / 2;
+
+            for (int i = 0; i < this.candidates.size(); i++) {
+                if (click.x() >= bx && click.x() <= bx + btnW
+                        && click.y() >= btnY && click.y() <= btnY + 14) {
+                    selectCandidate(i);
+                    return true;
+                }
+                bx += btnW + 4;
+            }
+        }
+        return super.mouseClicked(click, doubled);
+    }
+
     private void destroyTextures() {
-        if (this.currentTexture != null) {
-            this.currentTexture.close();
-            this.currentTexture = null;
-        }
-        if (this.bannerTexture != null) {
-            this.bannerTexture.close();
-            this.bannerTexture = null;
-        }
+        if (this.currentTexture != null) { this.currentTexture.close(); this.currentTexture = null; }
+        if (this.bannerTexture != null) { this.bannerTexture.close(); this.bannerTexture = null; }
     }
 
     @Override
@@ -235,7 +322,5 @@ public class BannerDesignerScreen extends Screen {
     }
 
     @Override
-    public boolean shouldPause() {
-        return false;
-    }
+    public boolean shouldPause() { return false; }
 }
