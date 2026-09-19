@@ -7,7 +7,6 @@
     "authors": ["Banner Designer"],
     "contact": {},
     "license": "MIT",
-    "icon": "assets/banner-designer/icon.png",
     "environment": "client",
     "entrypoints": {
         "client": [
@@ -18,7 +17,7 @@
         "banner-designer.client.mixins.json"
     ],
     "depends": {
-        "fabricloader": ">=0.19.3",
+        "fabricloader": ">=0.19.5",
         "minecraft": "~1.21.11",
         "java": ">=21",
         "fabric-api": "*"
