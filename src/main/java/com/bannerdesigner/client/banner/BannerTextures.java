@@ -10,15 +10,9 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Loads and caches vanilla Minecraft banner textures from the game's own resources.
- * This gives us 100% accurate renders that match what the player will see in-game.
- *
- * Base banner: textures/entity/banner/base.png  (grayscale, tinted with base dye color)
- * Patterns:    textures/entity/banner/<pattern>.png  (mask, tinted with pattern dye color)
- */
 public final class BannerTextures {
 
     private static final Map<String, BufferedImage> CACHE = new ConcurrentHashMap<>();
@@ -58,8 +52,10 @@ public final class BannerTextures {
         for (String path : candidatePaths) {
             try {
                 Identifier id = Identifier.of("minecraft", path);
-                Resource res = rm.getResource(id);
-                try (InputStream in = res.getInputStream()) {
+                Optional<Resource> opt = rm.getResource(id);
+                if (opt.isEmpty()) continue;
+
+                try (InputStream in = opt.get().getInputStream()) {
                     BufferedImage img = ImageIO.read(in);
                     if (img != null) return img;
                 }
