@@ -85,7 +85,11 @@ public class BannerDesignerScreen extends Screen {
         if (img == null) {
             this.statusMessage = "Failed to load: " + preset.name();
         } else {
-            this.currentTexture = ImageTexture.fromBufferedImage(preset.name(), img);
+            int availableW = this.width - PREVIEW_X - 10;
+            int availableH = this.height - PREVIEW_TOP - PREVIEW_BOTTOM_MARGIN;
+            this.currentTexture = ImageTexture.fromBufferedImage(
+                    preset.name(), img, availableW, availableH
+            );
             this.statusMessage = "Loaded: " + preset.name()
                     + " (" + img.getWidth() + "x" + img.getHeight() + ")";
         }
@@ -124,21 +128,15 @@ public class BannerDesignerScreen extends Screen {
         int texW = this.currentTexture.width();
         int texH = this.currentTexture.height();
 
-        float ratio = Math.min((float) availableW / texW, (float) availableH / texH);
-        if (ratio > 1.0f) ratio = 1.0f;
-
-        int drawW = Math.max(1, (int) (texW * ratio));
-        int drawH = Math.max(1, (int) (texH * ratio));
-
-        int drawX = PREVIEW_X + (availableW - drawW) / 2;
-        int drawY = PREVIEW_TOP + (availableH - drawH) / 2;
+        int drawX = PREVIEW_X + (availableW - texW) / 2;
+        int drawY = PREVIEW_TOP + (availableH - texH) / 2;
 
         context.drawTexture(
                 RenderPipelines.GUI_TEXTURED,
                 this.currentTexture.identifier(),
                 drawX, drawY,
                 0.0f, 0.0f,
-                drawW, drawH,
+                texW, texH,
                 texW, texH
         );
 
@@ -146,8 +144,8 @@ public class BannerDesignerScreen extends Screen {
         context.drawCenteredTextWithShadow(
                 this.textRenderer,
                 dims,
-                drawX + drawW / 2,
-                drawY + drawH + 4,
+                drawX + texW / 2,
+                drawY + texH + 4,
                 COLOR_WHITE
         );
     }
