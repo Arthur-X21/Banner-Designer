@@ -20,6 +20,10 @@ public class BannerDesignerScreen extends Screen {
     private static final int BUTTON_HEIGHT = 22;
     private static final int BUTTON_SPACING = 4;
 
+    private static final int COLOR_WHITE = 0xFFFFFFFF;
+    private static final int COLOR_GRAY = 0xFFAAAAAA;
+    private static final int COLOR_GREEN = 0xFF55FF55;
+
     private final LoomScreenHandler loomHandler;
     private PreviewImage previewImage;
     private String statusMessage;
@@ -97,7 +101,7 @@ public class BannerDesignerScreen extends Screen {
                 this.title,
                 this.width / 2,
                 20,
-                0xFFFFFF
+                COLOR_WHITE
         );
 
         List<PresetEntry> presets = PresetManager.snapshot();
@@ -110,7 +114,7 @@ public class BannerDesignerScreen extends Screen {
                 info,
                 this.width / 2,
                 42,
-                0xAAAAAA
+                COLOR_GRAY
         );
 
         if (this.previewImage != null) {
@@ -122,7 +126,7 @@ public class BannerDesignerScreen extends Screen {
                     dims,
                     this.width / 2,
                     56,
-                    0x55FF55
+                    COLOR_GREEN
             );
         }
     }
