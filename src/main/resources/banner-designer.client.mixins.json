@@ -4,7 +4,8 @@
     "compatibilityLevel": "JAVA_21",
     "client": [
         "LoomScreenMixin",
-        "LoomScreenAccessor"
+        "LoomScreenAccessor",
+        "ScreenInvoker"
     ],
     "injectors": {
         "defaultRequire": 1
