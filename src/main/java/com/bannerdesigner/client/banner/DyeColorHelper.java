@@ -52,4 +52,18 @@ public final class DyeColorHelper {
     public static DyeColor nearest(int argb) {
         return nearest((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
     }
+
+    /** Safe replacement for DyeColor.getName() across versions. */
+    public static String id(DyeColor color) {
+        return color.name().toLowerCase();
+    }
+
+    /** Safe replacement for DyeColor.byName(String, DyeColor). */
+    public static DyeColor byId(String id, DyeColor fallback) {
+        if (id == null) return fallback;
+        for (DyeColor c : DyeColor.values()) {
+            if (c.name().equalsIgnoreCase(id)) return c;
+        }
+        return fallback;
+    }
 }

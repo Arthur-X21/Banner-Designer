@@ -81,10 +81,10 @@ public final class CacheManager {
     private static String serializeCandidate(BannerCandidate c) {
         BannerDefinition d = c.definition();
         StringBuilder sb = new StringBuilder();
-        sb.append(d.baseColor().getName()).append("|").append(c.score());
+        sb.append(d.baseColor().name().toLowerCase()).append("|").append(c.score());
         for (BannerLayer layer : d.layers()) {
             sb.append("|").append(layer.patternId())
-              .append(":").append(layer.color().getName());
+              .append(":").append(layer.color().name().toLowerCase());
         }
         return sb.toString();
     }
@@ -93,13 +93,13 @@ public final class CacheManager {
         try {
             String[] parts = line.split("\\|");
             if (parts.length < 2) return null;
-            DyeColor base = DyeColor.byName(parts[0], DyeColor.WHITE);
+            DyeColor base = com.bannerdesigner.client.banner.DyeColorHelper.byId(parts[0], DyeColor.WHITE);
             double score = Double.parseDouble(parts[1]);
             List<BannerLayer> layers = new ArrayList<>();
             for (int i = 2; i < parts.length; i++) {
                 String[] p = parts[i].split(":");
                 if (p.length != 2) continue;
-                DyeColor color = DyeColor.byName(p[1], DyeColor.WHITE);
+                DyeColor color = com.bannerdesigner.client.banner.DyeColorHelper.byId(p[1], DyeColor.WHITE);
                 layers.add(new BannerLayer(p[0], color, i - 2));
             }
             return new BannerCandidate(new BannerDefinition(base, layers), score);

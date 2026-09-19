@@ -242,7 +242,7 @@ public class BannerDesignerScreen extends Screen {
     }
 
     private void drawLayerInfo(DrawContext context, int x, int y, int w, BannerDefinition def) {
-        String baseLine = "Base: " + niceName(def.baseColor().getName());
+        String baseLine = "Base: " + niceName(def.baseColor().name().toLowerCase());
         context.drawCenteredTextWithShadow(this.textRenderer,
                 Text.literal(baseLine), x + w / 2, y, COLOR_GRAY);
 
@@ -250,7 +250,7 @@ public class BannerDesignerScreen extends Screen {
         int max = Math.min(def.layerCount(), 4);
         for (int i = 0; i < max; i++) {
             BannerLayer layer = def.layers().get(i);
-            String s = (i + 1) + ". " + niceName(layer.color().getName())
+            String s = (i + 1) + ". " + niceName(layer.color().name().toLowerCase())
                     + " " + niceName(layer.patternId());
             context.drawCenteredTextWithShadow(this.textRenderer,
                     Text.literal(s), x + w / 2, ly, COLOR_GRAY);
