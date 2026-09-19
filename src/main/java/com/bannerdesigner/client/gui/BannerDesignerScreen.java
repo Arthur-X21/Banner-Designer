@@ -1,5 +1,7 @@
 package com.bannerdesigner.client.gui;
 
+import com.bannerdesigner.client.image.ImageLoader;
+import com.bannerdesigner.client.image.PreviewImage;
 import com.bannerdesigner.client.preset.PresetEntry;
 import com.bannerdesigner.client.preset.PresetManager;
 import net.minecraft.client.gui.DrawContext;
@@ -8,6 +10,7 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.screen.LoomScreenHandler;
 import net.minecraft.text.Text;
 
+import java.awt.image.BufferedImage;
 import java.util.List;
 
 public class BannerDesignerScreen extends Screen {
@@ -18,6 +21,8 @@ public class BannerDesignerScreen extends Screen {
     private static final int BUTTON_SPACING = 4;
 
     private final LoomScreenHandler loomHandler;
+    private PreviewImage previewImage;
+    private String statusMessage;
 
     public BannerDesignerScreen(LoomScreenHandler loomHandler) {
         super(Text.translatable("bannerdesigner.screen.title"));
@@ -65,9 +70,19 @@ public class BannerDesignerScreen extends Screen {
     }
 
     private void onPresetSelected(PresetEntry preset) {
+        BufferedImage img = ImageLoader.load(preset.path());
+        if (img == null) {
+            this.previewImage = null;
+            this.statusMessage = "Failed to load: " + preset.name();
+        } else {
+            this.previewImage = new PreviewImage(preset.name(), img);
+            this.statusMessage = "Loaded: " + preset.name()
+                    + " (" + img.getWidth() + "x" + img.getHeight() + ")";
+        }
+
         if (this.client != null && this.client.player != null) {
             this.client.player.sendMessage(
-                    Text.translatable("bannerdesigner.message.preset_selected", preset.name()),
+                    Text.literal(this.statusMessage),
                     false
             );
         }
@@ -97,6 +112,19 @@ public class BannerDesignerScreen extends Screen {
                 42,
                 0xAAAAAA
         );
+
+        if (this.previewImage != null) {
+            Text dims = Text.literal(
+                    this.previewImage.width() + " x " + this.previewImage.height()
+            );
+            context.drawCenteredTextWithShadow(
+                    this.textRenderer,
+                    dims,
+                    this.width / 2,
+                    56,
+                    0x55FF55
+            );
+        }
     }
 
     @Override
