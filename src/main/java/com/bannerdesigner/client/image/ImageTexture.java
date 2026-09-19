@@ -12,8 +12,6 @@ import java.awt.image.BufferedImage;
 
 public class ImageTexture implements AutoCloseable {
 
-    private static final int MAX_TEXTURE_SIZE = 512;
-
     private final Identifier identifier;
     private final int width;
     private final int height;
@@ -24,28 +22,34 @@ public class ImageTexture implements AutoCloseable {
         this.height = height;
     }
 
-    public static ImageTexture fromBufferedImage(String name, BufferedImage source) {
+    /**
+     * Rescales the source image to fit within maxWidth x maxHeight (preserving aspect ratio),
+     * then uploads as a texture at that exact resolution. This lets the screen render
+     * the texture at 1:1 scale, avoiding matrix transforms entirely.
+     */
+    public static ImageTexture fromBufferedImage(String name, BufferedImage source,
+                                                  int maxWidth, int maxHeight) {
         int srcW = source.getWidth();
         int srcH = source.getHeight();
 
-        float ratio = Math.min(1.0f,
-                Math.min((float) MAX_TEXTURE_SIZE / srcW, (float) MAX_TEXTURE_SIZE / srcH));
-        int targetW = Math.max(1, (int) (srcW * ratio));
-        int targetH = Math.max(1, (int) (srcH * ratio));
+        float scale = Math.min(
+                (float) maxWidth / srcW,
+                (float) maxHeight / srcH
+        );
+        if (scale > 1.0f) scale = 1.0f;
+        int targetW = Math.max(1, (int) (srcW * scale));
+        int targetH = Math.max(1, (int) (srcH * scale));
 
-        BufferedImage scaled;
-        if (targetW == srcW && targetH == srcH) {
-            scaled = source;
-        } else {
-            scaled = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
-            Graphics2D g = scaled.createGraphics();
-            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g.setRenderingHint(RenderingHints.KEY_RENDERING,
-                    RenderingHints.VALUE_RENDER_QUALITY);
-            g.drawImage(source, 0, 0, targetW, targetH, null);
-            g.dispose();
-        }
+        BufferedImage scaled = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = scaled.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.setRenderingHint(RenderingHints.KEY_RENDERING,
+                RenderingHints.VALUE_RENDER_QUALITY);
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                RenderingHints.VALUE_ANTIALIAS_ON);
+        g.drawImage(source, 0, 0, targetW, targetH, null);
+        g.dispose();
 
         NativeImage nativeImage = new NativeImage(NativeImage.Format.RGBA, targetW, targetH, false);
         for (int y = 0; y < targetH; y++) {
@@ -62,7 +66,6 @@ public class ImageTexture implements AutoCloseable {
                 () -> "banner_designer_" + safeName,
                 nativeImage
         );
-
         MinecraftClient.getInstance().getTextureManager().registerTexture(id, tex);
 
         return new ImageTexture(id, targetW, targetH);

@@ -14,7 +14,6 @@ import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.screen.LoomScreenHandler;
 import net.minecraft.text.Text;
 
@@ -95,6 +94,15 @@ public class BannerDesignerScreen extends Screen {
         ).dimensions(this.width / 2 + 10, bottomY, 140, 20).build());
     }
 
+    private int panelWidth() {
+        int availableW = this.width - IMAGE_X - 10;
+        return (availableW - PANEL_GAP) / 2;
+    }
+
+    private int panelHeight() {
+        return this.height - PREVIEW_TOP - PREVIEW_BOTTOM;
+    }
+
     private void onPresetSelected(PresetEntry preset) {
         destroyTextures();
 
@@ -103,7 +111,9 @@ public class BannerDesignerScreen extends Screen {
             this.statusMessage = "Failed to load: " + preset.name();
         } else {
             this.currentImage = img;
-            this.currentTexture = ImageTexture.fromBufferedImage(preset.name(), img);
+            int pw = panelWidth();
+            int ph = panelHeight();
+            this.currentTexture = ImageTexture.fromBufferedImage(preset.name(), img, pw, ph);
             this.statusMessage = "Loaded: " + preset.name()
                     + " (" + img.getWidth() + "x" + img.getHeight() + ")";
         }
@@ -133,7 +143,9 @@ public class BannerDesignerScreen extends Screen {
                 this.bannerTexture = null;
             }
             BufferedImage rendered = BannerRenderer2D.render(this.currentBanner);
-            this.bannerTexture = ImageTexture.fromBufferedImage("banner_preview", rendered);
+            int pw = panelWidth();
+            int ph = panelHeight();
+            this.bannerTexture = ImageTexture.fromBufferedImage("banner_preview", rendered, pw, ph);
 
             sendChat(String.format("Analyzed. Match: %.1f%%", this.currentScore * 100.0));
         } catch (Exception e) {
@@ -161,12 +173,10 @@ public class BannerDesignerScreen extends Screen {
                 : Text.translatable("bannerdesigner.info.presets_found", presets.size());
         context.drawCenteredTextWithShadow(this.textRenderer, info, this.width / 2, 26, COLOR_GRAY);
 
-        int availableW = this.width - IMAGE_X - 10;
-        int availableH = this.height - PREVIEW_TOP - PREVIEW_BOTTOM;
-        int halfW = (availableW - PANEL_GAP) / 2;
-
+        int pw = panelWidth();
+        int ph = panelHeight();
         int leftX = IMAGE_X;
-        int rightX = IMAGE_X + halfW + PANEL_GAP;
+        int rightX = IMAGE_X + pw + PANEL_GAP;
 
         context.drawTextWithShadow(this.textRenderer,
                 Text.literal("Original"), leftX, PREVIEW_TOP - 12, COLOR_GRAY);
@@ -174,43 +184,37 @@ public class BannerDesignerScreen extends Screen {
                 Text.literal("Banner"), rightX, PREVIEW_TOP - 12, COLOR_GRAY);
 
         if (this.currentTexture != null) {
-            drawFitted(context, this.currentTexture, leftX, PREVIEW_TOP, halfW, availableH);
+            drawCentered(context, this.currentTexture, leftX, PREVIEW_TOP, pw, ph);
         }
 
         if (this.bannerTexture != null) {
-            drawFitted(context, this.bannerTexture, rightX, PREVIEW_TOP, halfW, availableH);
+            drawCentered(context, this.bannerTexture, rightX, PREVIEW_TOP, pw, ph);
             Text score = Text.literal(String.format("Match: %.1f%%", this.currentScore * 100.0));
             context.drawCenteredTextWithShadow(this.textRenderer, score,
-                    rightX + halfW / 2, PREVIEW_TOP + availableH + 4, COLOR_GREEN);
+                    rightX + pw / 2, PREVIEW_TOP + ph + 4, COLOR_GREEN);
         }
     }
 
-    private void drawFitted(DrawContext context, ImageTexture tex,
-                             int areaX, int areaY, int areaW, int areaH) {
+    /**
+     * Draws the texture at its native size (1:1) centered within the given area.
+     * The texture itself was pre-scaled by ImageTexture.fromBufferedImage to fit
+     * within (areaW x areaH). No matrix transformations needed.
+     */
+    private void drawCentered(DrawContext context, ImageTexture tex,
+                               int areaX, int areaY, int areaW, int areaH) {
         int texW = tex.width();
         int texH = tex.height();
-        float scale = Math.min((float) areaW / texW, (float) areaH / texH);
-        if (scale > 1.0f) scale = 1.0f;
-        int drawW = Math.max(1, (int) (texW * scale));
-        int drawH = Math.max(1, (int) (texH * scale));
-        int drawX = areaX + (areaW - drawW) / 2;
-        int drawY = areaY + (areaH - drawH) / 2;
-
-        MatrixStack matrices = context.getMatrices();
-        matrices.push();
-        matrices.translate((float) drawX, (float) drawY, 0.0f);
-        matrices.scale(scale, scale, 1.0f);
+        int drawX = areaX + (areaW - texW) / 2;
+        int drawY = areaY + (areaH - texH) / 2;
 
         context.drawTexture(
                 RenderPipelines.GUI_TEXTURED,
                 tex.identifier(),
-                0, 0,
+                drawX, drawY,
                 0.0f, 0.0f,
                 texW, texH,
                 texW, texH
         );
-
-        matrices.pop();
     }
 
     private void destroyTextures() {
