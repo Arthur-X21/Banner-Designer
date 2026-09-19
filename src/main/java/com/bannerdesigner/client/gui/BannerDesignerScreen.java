@@ -1,7 +1,7 @@
 package com.bannerdesigner.client.gui;
 
 import com.bannerdesigner.client.image.ImageLoader;
-import com.bannerdesigner.client.image.PreviewImage;
+import com.bannerdesigner.client.image.ImageTexture;
 import com.bannerdesigner.client.preset.PresetEntry;
 import com.bannerdesigner.client.preset.PresetManager;
 import net.minecraft.client.gui.DrawContext;
@@ -15,17 +15,21 @@ import java.util.List;
 
 public class BannerDesignerScreen extends Screen {
 
-    private static final int TOP_MARGIN = 70;
-    private static final int BOTTOM_MARGIN = 70;
-    private static final int BUTTON_HEIGHT = 22;
-    private static final int BUTTON_SPACING = 4;
-
     private static final int COLOR_WHITE = 0xFFFFFFFF;
     private static final int COLOR_GRAY = 0xFFAAAAAA;
-    private static final int COLOR_GREEN = 0xFF55FF55;
+
+    private static final int SIDEBAR_X = 10;
+    private static final int SIDEBAR_WIDTH = 160;
+    private static final int SIDEBAR_TOP = 45;
+    private static final int PRESET_BUTTON_HEIGHT = 18;
+    private static final int PRESET_BUTTON_SPACING = 3;
+
+    private static final int PREVIEW_X = 180;
+    private static final int PREVIEW_TOP = 45;
+    private static final int PREVIEW_BOTTOM_MARGIN = 60;
 
     private final LoomScreenHandler loomHandler;
-    private PreviewImage previewImage;
+    private ImageTexture currentTexture;
     private String statusMessage;
 
     public BannerDesignerScreen(LoomScreenHandler loomHandler) {
@@ -40,27 +44,24 @@ public class BannerDesignerScreen extends Screen {
         PresetManager.reload();
         List<PresetEntry> presets = PresetManager.snapshot();
 
-        int buttonWidth = Math.min(280, this.width - 40);
-        int buttonX = (this.width - buttonWidth) / 2;
-
-        int availableHeight = this.height - TOP_MARGIN - BOTTOM_MARGIN;
-        int perButton = BUTTON_HEIGHT + BUTTON_SPACING;
+        int availableHeight = this.height - SIDEBAR_TOP - 60;
+        int perButton = PRESET_BUTTON_HEIGHT + PRESET_BUTTON_SPACING;
         int maxVisible = Math.max(1, availableHeight / perButton);
         int visibleCount = Math.min(presets.size(), maxVisible);
 
         for (int i = 0; i < visibleCount; i++) {
             PresetEntry preset = presets.get(i);
-            int y = TOP_MARGIN + i * perButton;
+            int y = SIDEBAR_TOP + i * perButton;
 
             ButtonWidget button = ButtonWidget.builder(
                     Text.literal(preset.name()),
                     b -> onPresetSelected(preset)
-            ).dimensions(buttonX, y, buttonWidth, BUTTON_HEIGHT).build();
+            ).dimensions(SIDEBAR_X, y, SIDEBAR_WIDTH, PRESET_BUTTON_HEIGHT).build();
 
             this.addDrawableChild(button);
         }
 
-        int bottomY = this.height - 52;
+        int bottomY = this.height - 30;
 
         this.addDrawableChild(ButtonWidget.builder(
                 Text.translatable("bannerdesigner.button.reload"),
@@ -74,21 +75,22 @@ public class BannerDesignerScreen extends Screen {
     }
 
     private void onPresetSelected(PresetEntry preset) {
+        if (this.currentTexture != null) {
+            this.currentTexture.close();
+            this.currentTexture = null;
+        }
+
         BufferedImage img = ImageLoader.load(preset.path());
         if (img == null) {
-            this.previewImage = null;
             this.statusMessage = "Failed to load: " + preset.name();
         } else {
-            this.previewImage = new PreviewImage(preset.name(), img);
+            this.currentTexture = ImageTexture.fromBufferedImage(preset.name(), img);
             this.statusMessage = "Loaded: " + preset.name()
                     + " (" + img.getWidth() + "x" + img.getHeight() + ")";
         }
 
         if (this.client != null && this.client.player != null) {
-            this.client.player.sendMessage(
-                    Text.literal(this.statusMessage),
-                    false
-            );
+            this.client.player.sendMessage(Text.literal(this.statusMessage), false);
         }
     }
 
@@ -97,11 +99,7 @@ public class BannerDesignerScreen extends Screen {
         super.render(context, mouseX, mouseY, delta);
 
         context.drawCenteredTextWithShadow(
-                this.textRenderer,
-                this.title,
-                this.width / 2,
-                20,
-                COLOR_WHITE
+                this.textRenderer, this.title, this.width / 2, 15, COLOR_WHITE
         );
 
         List<PresetEntry> presets = PresetManager.snapshot();
@@ -110,24 +108,54 @@ public class BannerDesignerScreen extends Screen {
                 : Text.translatable("bannerdesigner.info.presets_found", presets.size());
 
         context.drawCenteredTextWithShadow(
-                this.textRenderer,
-                info,
-                this.width / 2,
-                42,
-                COLOR_GRAY
+                this.textRenderer, info, this.width / 2, 28, COLOR_GRAY
         );
 
-        if (this.previewImage != null) {
-            Text dims = Text.literal(
-                    this.previewImage.width() + " x " + this.previewImage.height()
-            );
-            context.drawCenteredTextWithShadow(
-                    this.textRenderer,
-                    dims,
-                    this.width / 2,
-                    56,
-                    COLOR_GREEN
-            );
+        if (this.currentTexture != null) {
+            drawPreview(context);
+        }
+    }
+
+    private void drawPreview(DrawContext context) {
+        int availableW = this.width - PREVIEW_X - 10;
+        int availableH = this.height - PREVIEW_TOP - PREVIEW_BOTTOM_MARGIN;
+
+        int texW = this.currentTexture.width();
+        int texH = this.currentTexture.height();
+
+        float ratio = Math.min((float) availableW / texW, (float) availableH / texH);
+        if (ratio > 1.0f) ratio = 1.0f;
+
+        int drawW = Math.max(1, (int) (texW * ratio));
+        int drawH = Math.max(1, (int) (texH * ratio));
+
+        int drawX = PREVIEW_X + (availableW - drawW) / 2;
+        int drawY = PREVIEW_TOP + (availableH - drawH) / 2;
+
+        context.drawTexture(
+                this.currentTexture.identifier(),
+                drawX, drawY,
+                0.0f, 0.0f,
+                drawW, drawH,
+                texW, texH
+        );
+
+        Text dims = Text.literal(texW + " x " + texH);
+        context.drawCenteredTextWithShadow(
+                this.textRenderer,
+                dims,
+                drawX + drawW / 2,
+                drawY + drawH + 4,
+                COLOR_WHITE
+        );
+    }
+
+    @Override
+    public void removed() {
+        super.removed();
+        if (this.currentTexture != null) {
+            this.currentTexture.close();
+            this.currentTexture = null;
         }
     }
 
