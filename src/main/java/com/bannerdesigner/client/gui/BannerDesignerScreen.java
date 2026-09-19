@@ -30,7 +30,9 @@ public class BannerDesignerScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        this.renderBackground(context, mouseX, mouseY, delta);
+        // In Minecraft 1.21.11, super.render(...) already calls renderBackground internally.
+        // Do NOT call this.renderBackground(...) here, or the blur will be applied twice per frame,
+        // causing: java.lang.IllegalStateException: Can only blur once per frame
         super.render(context, mouseX, mouseY, delta);
 
         context.drawCenteredTextWithShadow(
