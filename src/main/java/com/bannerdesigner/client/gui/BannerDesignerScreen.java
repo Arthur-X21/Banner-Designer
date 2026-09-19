@@ -4,6 +4,7 @@ import com.bannerdesigner.client.image.ImageLoader;
 import com.bannerdesigner.client.image.ImageTexture;
 import com.bannerdesigner.client.preset.PresetEntry;
 import com.bannerdesigner.client.preset.PresetManager;
+import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -133,6 +134,7 @@ public class BannerDesignerScreen extends Screen {
         int drawY = PREVIEW_TOP + (availableH - drawH) / 2;
 
         context.drawTexture(
+                RenderPipelines.GUI_TEXTURED,
                 this.currentTexture.identifier(),
                 drawX, drawY,
                 0.0f, 0.0f,

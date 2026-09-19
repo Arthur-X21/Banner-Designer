@@ -1,7 +1,7 @@
 package com.bannerdesigner.client.image;
 
 import com.bannerdesigner.client.BannerDesignerClient;
-import com.mojang.blaze3d.platform.NativeImage;
+import net.minecraft.client.texture.NativeImage;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.util.Identifier;
