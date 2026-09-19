@@ -1,0 +1,26 @@
+{
+    "schemaVersion": 1,
+    "id": "banner-designer",
+    "version": "${version}",
+    "name": "Banner Designer",
+    "description": "Client-side Banner Design Studio integrated into Vanilla Loom.",
+    "authors": ["Banner Designer"],
+    "contact": {},
+    "license": "MIT",
+    "icon": "assets/banner-designer/icon.png",
+    "environment": "client",
+    "entrypoints": {
+        "client": [
+            "com.bannerdesigner.client.BannerDesignerClient"
+        ]
+    },
+    "mixins": [
+        "banner-designer.client.mixins.json"
+    ],
+    "depends": {
+        "fabricloader": ">=0.19.3",
+        "minecraft": "~1.21.11",
+        "java": ">=21",
+        "fabric-api": "*"
+    }
+}
