@@ -10,10 +10,13 @@ import com.bannerdesigner.client.image.ImageLoader;
 import com.bannerdesigner.client.image.ImageTexture;
 import com.bannerdesigner.client.inventory.InventoryScanner;
 import com.bannerdesigner.client.inventory.ResourceReport;
+import com.bannerdesigner.client.loom.LoomActionPlan;
+import com.bannerdesigner.client.loom.LoomStep;
 import com.bannerdesigner.client.preset.PresetEntry;
 import com.bannerdesigner.client.preset.PresetManager;
 import com.bannerdesigner.client.solver.BannerCandidate;
 import com.bannerdesigner.client.solver.SimpleSolver;
+import com.bannerdesigner.client.util.BackgroundExecutor;
 import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -51,8 +54,12 @@ public class BannerDesignerScreen extends Screen {
     private List<BannerCandidate> candidates = new ArrayList<>();
     private int selectedCandidate = 0;
     private ResourceReport resourceReport;
+    private LoomActionPlan loomPlan;
     private boolean showResources = false;
+    private boolean showPlanner = false;
+    private boolean busy = false;
     private String loadedPresetName;
+    private String busyMessage = "";
 
     public BannerDesignerScreen(LoomScreenHandler loomHandler) {
         super(Text.translatable("bannerdesigner.screen.title"));
@@ -65,7 +72,7 @@ public class BannerDesignerScreen extends Screen {
         PresetManager.reload();
         List<PresetEntry> presets = PresetManager.snapshot();
 
-        int availableHeight = this.height - SIDEBAR_TOP - 110;
+        int availableHeight = this.height - SIDEBAR_TOP - 130;
         int perButton = PRESET_BUTTON_HEIGHT + PRESET_BUTTON_SPACING;
         int maxVisible = Math.max(1, availableHeight / perButton);
         int visibleCount = Math.min(presets.size(), maxVisible);
@@ -79,7 +86,7 @@ public class BannerDesignerScreen extends Screen {
             ).dimensions(SIDEBAR_X, y, SIDEBAR_WIDTH, PRESET_BUTTON_HEIGHT).build());
         }
 
-        int btnY = this.height - 100;
+        int btnY = this.height - 122;
         this.addDrawableChild(ButtonWidget.builder(
                 Text.translatable("bannerdesigner.button.analyze"),
                 b -> onAnalyze()
@@ -90,8 +97,12 @@ public class BannerDesignerScreen extends Screen {
         ).dimensions(SIDEBAR_X, btnY + 22, SIDEBAR_WIDTH, 20).build());
         this.addDrawableChild(ButtonWidget.builder(
                 Text.translatable("bannerdesigner.button.resources"),
-                b -> onToggleResources()
+                b -> { this.showResources = !this.showResources; this.showPlanner = false; }
         ).dimensions(SIDEBAR_X, btnY + 44, SIDEBAR_WIDTH, 20).build());
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.translatable("bannerdesigner.button.plan"),
+                b -> onTogglePlanner()
+        ).dimensions(SIDEBAR_X, btnY + 66, SIDEBAR_WIDTH, 20).build());
 
         int bottomY = this.height - 28;
         this.addDrawableChild(ButtonWidget.builder(
@@ -108,41 +119,72 @@ public class BannerDesignerScreen extends Screen {
         return s.length() <= max ? s : s.substring(0, max - 1) + "…";
     }
 
-    private int panelWidth() {
-        return (this.width - IMAGE_X - 10 - PANEL_GAP) / 2;
-    }
-
-    private int panelHeight() {
-        return this.height - PREVIEW_TOP - PREVIEW_BOTTOM;
-    }
+    private int panelWidth() { return (this.width - IMAGE_X - 10 - PANEL_GAP) / 2; }
+    private int panelHeight() { return this.height - PREVIEW_TOP - PREVIEW_BOTTOM; }
 
     private void onPresetSelected(PresetEntry preset) {
+        if (this.busy) return;
         destroyTextures();
         this.candidates.clear();
         this.selectedCandidate = 0;
         this.resourceReport = null;
+        this.loomPlan = null;
         this.loadedPresetName = preset.name();
+        this.busy = true;
+        this.busyMessage = "Loading image...";
 
-        BufferedImage img = ImageLoader.load(preset.path());
-        if (img == null) { sendChat("Failed to load: " + preset.name()); return; }
-        this.currentImage = img;
-        this.currentTexture = ImageTexture.fromBufferedImage(preset.name(), img, panelWidth(), panelHeight());
-        sendChat("Loaded: " + preset.name() + " (" + img.getWidth() + "x" + img.getHeight() + ")");
+        BackgroundExecutor.submit(
+                () -> ImageLoader.load(preset.path()),
+                img -> {
+                    this.busy = false;
+                    this.busyMessage = "";
+                    if (img == null) { sendChat("Failed to load: " + preset.name()); return; }
+                    this.currentImage = img;
+                    this.currentTexture = ImageTexture.fromBufferedImage(
+                            preset.name(), img, panelWidth(), panelHeight());
+                    sendChat("Loaded: " + preset.name() + " (" + img.getWidth() + "x" + img.getHeight() + ")");
+                },
+                err -> {
+                    this.busy = false;
+                    this.busyMessage = "";
+                    sendChat("Load failed: " + err.getMessage());
+                }
+        );
     }
 
     private void onAnalyze() {
+        if (this.busy) return;
         if (this.currentImage == null) { sendChat("Select a preset first."); return; }
-        try {
-            AnalysisResult analysis = ColorAnalyzer.analyze(this.currentImage);
-            this.candidates = SimpleSolver.solve(this.currentImage, analysis,
-                    com.bannerdesigner.client.config.ConfigManager.maxCandidates());
-            this.selectedCandidate = 0;
-            if (this.candidates.isEmpty()) { sendChat("No candidates found."); return; }
-            updateBannerTexture();
-            updateResourceReport();
-            sendChat(String.format("Analyzed. Match: %.1f%% (top of %d)",
-                    this.candidates.get(0).score() * 100.0, this.candidates.size()));
-        } catch (Exception e) { sendChat("Analysis failed: " + e.getMessage()); }
+
+        this.busy = true;
+        this.busyMessage = "Analyzing...";
+
+        final BufferedImage target = this.currentImage;
+        final int maxCand = com.bannerdesigner.client.config.ConfigManager.maxCandidates();
+
+        BackgroundExecutor.submit(
+                () -> {
+                    AnalysisResult analysis = ColorAnalyzer.analyze(target);
+                    return SimpleSolver.solve(target, analysis, maxCand);
+                },
+                sol -> {
+                    this.busy = false;
+                    this.busyMessage = "";
+                    this.candidates = sol;
+                    this.selectedCandidate = 0;
+                    if (sol.isEmpty()) { sendChat("No candidates found."); return; }
+                    updateBannerTexture();
+                    updateResourceReport();
+                    updateLoomPlan();
+                    sendChat(String.format("Analyzed. Match: %.1f%% (top of %d)",
+                            sol.get(0).score() * 100.0, sol.size()));
+                },
+                err -> {
+                    this.busy = false;
+                    this.busyMessage = "";
+                    sendChat("Analysis failed: " + err.getMessage());
+                }
+        );
     }
 
     private void onSave() {
@@ -154,9 +196,10 @@ public class BannerDesignerScreen extends Screen {
         sendChat("Saved design: " + name);
     }
 
-    private void onToggleResources() {
-        this.showResources = !this.showResources;
-        if (this.showResources && this.resourceReport == null) updateResourceReport();
+    private void onTogglePlanner() {
+        if (this.candidates.isEmpty()) { sendChat("Analyze first."); return; }
+        this.showPlanner = !this.showPlanner;
+        if (this.showPlanner) this.showResources = false;
     }
 
     private void updateBannerTexture() {
@@ -175,11 +218,18 @@ public class BannerDesignerScreen extends Screen {
         catch (Exception e) { this.resourceReport = null; }
     }
 
+    private void updateLoomPlan() {
+        if (this.candidates.isEmpty()) { this.loomPlan = null; return; }
+        try { this.loomPlan = LoomActionPlan.build(this.candidates.get(this.selectedCandidate).definition()); }
+        catch (Exception e) { this.loomPlan = null; }
+    }
+
     private void selectCandidate(int index) {
         if (index < 0 || index >= this.candidates.size()) return;
         this.selectedCandidate = index;
         updateBannerTexture();
         updateResourceReport();
+        updateLoomPlan();
     }
 
     private void sendChat(String msg) {
@@ -197,6 +247,12 @@ public class BannerDesignerScreen extends Screen {
                 ? Text.translatable("bannerdesigner.info.no_presets")
                 : Text.translatable("bannerdesigner.info.presets_found", presets.size());
         context.drawCenteredTextWithShadow(this.textRenderer, info, this.width/2, 24, COLOR_GRAY);
+
+        if (this.busy) {
+            context.drawCenteredTextWithShadow(this.textRenderer,
+                    Text.literal(this.busyMessage), this.width/2, this.height/2, COLOR_YELLOW);
+            return;
+        }
 
         int pw = panelWidth(), ph = panelHeight();
         int leftX = IMAGE_X, rightX = IMAGE_X + pw + PANEL_GAP;
@@ -234,6 +290,8 @@ public class BannerDesignerScreen extends Screen {
 
         if (this.showResources && this.resourceReport != null)
             drawResourcesPanel(context);
+        else if (this.showPlanner && this.loomPlan != null)
+            drawPlannerPanel(context);
     }
 
     private void drawLayerInfo(DrawContext context, int x, int y, int w, BannerDefinition def) {
@@ -253,9 +311,8 @@ public class BannerDesignerScreen extends Screen {
         int w = 220;
         int x = this.width - w - 10;
         int y = 30, h = this.height - 70;
-        context.fill(x, y, x+w, y+h, 0xCC000000);
+        context.fill(x, y, x+w, y+h, 0xDD000000);
         context.drawTextWithShadow(this.textRenderer, Text.literal("Resources"), x+6, y+4, COLOR_YELLOW);
-
         int ly = y + 20;
         context.drawTextWithShadow(this.textRenderer, Text.literal("Required:"), x+6, ly, COLOR_WHITE);
         ly += 11;
@@ -276,6 +333,34 @@ public class BannerDesignerScreen extends Screen {
                         Text.literal("  " + r.display() + " x" + r.count()), x+6, ly, COLOR_RED);
                 ly += 10;
             }
+        }
+    }
+
+    private void drawPlannerPanel(DrawContext context) {
+        int w = 260;
+        int x = this.width - w - 10;
+        int y = 30, h = this.height - 70;
+        context.fill(x, y, x+w, y+h, 0xDD000000);
+        context.drawTextWithShadow(this.textRenderer,
+                Text.literal("Loom Steps (Guided)"), x+6, y+4, COLOR_YELLOW);
+
+        int ly = y + 22;
+        int cur = this.loomPlan.currentStep();
+        for (int i = 0; i < this.loomPlan.totalSteps(); i++) {
+            LoomStep step = this.loomPlan.steps().get(i);
+            int col = (i == cur) ? COLOR_YELLOW
+                    : (i < cur ? COLOR_GREEN : COLOR_GRAY);
+            String prefix = (i == cur) ? "> " : "  ";
+            context.drawTextWithShadow(this.textRenderer,
+                    Text.literal(prefix + step.index() + ". " + step.description()),
+                    x+6, ly, col);
+            ly += 11;
+            if (!step.itemDescription().isEmpty()) {
+                context.drawTextWithShadow(this.textRenderer,
+                        Text.literal("     " + step.itemDescription()), x+16, ly, COLOR_GRAY);
+                ly += 10;
+            }
+            if (ly > y + h - 12) break;
         }
     }
 
@@ -302,7 +387,7 @@ public class BannerDesignerScreen extends Screen {
 
     @Override
     public boolean mouseClicked(net.minecraft.client.gui.Click click, boolean doubled) {
-        if (click.button() == 0 && this.candidates.size() > 1) {
+        if (click.button() == 0 && this.candidates.size() > 1 && !this.busy) {
             int pw = panelWidth(), ph = panelHeight();
             int rightX = IMAGE_X + pw + PANEL_GAP;
             int btnY = PREVIEW_TOP + ph + 60;

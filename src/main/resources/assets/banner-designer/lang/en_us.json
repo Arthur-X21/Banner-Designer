@@ -5,6 +5,7 @@
     "bannerdesigner.button.analyze": "Analyze Image",
     "bannerdesigner.button.save": "Save Design",
     "bannerdesigner.button.resources": "Resources",
+    "bannerdesigner.button.plan": "Loom Steps",
     "bannerdesigner.screen.title": "Banner Designer",
     "bannerdesigner.info.no_presets": "No presets found.",
     "bannerdesigner.info.presets_found": "Presets found: %s"
