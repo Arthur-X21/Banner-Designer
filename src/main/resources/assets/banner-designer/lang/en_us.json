@@ -3,8 +3,9 @@
     "bannerdesigner.button.back": "Back to Loom",
     "bannerdesigner.button.reload": "Reload Presets",
     "bannerdesigner.button.analyze": "Analyze Image",
+    "bannerdesigner.button.save": "Save Design",
+    "bannerdesigner.button.resources": "Resources",
     "bannerdesigner.screen.title": "Banner Designer",
-    "bannerdesigner.info.no_presets": "No presets found. Put images in the presets folder.",
-    "bannerdesigner.info.presets_found": "Presets found: %s",
-    "bannerdesigner.message.preset_selected": "Selected preset: %s"
+    "bannerdesigner.info.no_presets": "No presets found.",
+    "bannerdesigner.info.presets_found": "Presets found: %s"
 }

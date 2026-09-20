@@ -1,7 +1,7 @@
 package com.bannerdesigner.client.solver;
 
 import com.bannerdesigner.client.analysis.AnalysisResult;
-import com.bannerdesigner.client.analysis.ColorAnalyzer;
+import com.bannerdesigner.client.analysis.ScoreCalculator;
 import com.bannerdesigner.client.banner.BannerDefinition;
 import com.bannerdesigner.client.banner.BannerLayer;
 import com.bannerdesigner.client.banner.BannerPatternInfo;
@@ -80,7 +80,7 @@ public final class SimpleSolver {
 
     private static double score(BufferedImage target, BannerDefinition def) {
         BufferedImage rendered = BannerRenderer2D.render(def);
-        return ColorAnalyzer.similarity(target, rendered);
+        return ScoreCalculator.score(target, rendered);
     }
 
     private static boolean sameDef(BannerDefinition a, BannerDefinition b) {
