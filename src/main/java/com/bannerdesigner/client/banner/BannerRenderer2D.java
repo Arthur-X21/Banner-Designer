@@ -4,45 +4,51 @@ import java.awt.image.BufferedImage;
 
 public final class BannerRenderer2D {
 
-    public static final int FALLBACK_WIDTH = 64;
-    public static final int FALLBACK_HEIGHT = 40;
+    /** Output dimensions preserve banner's real 1:2 aspect ratio (width:height). */
+    public static final int RENDER_WIDTH = 40;
+    public static final int RENDER_HEIGHT = 80;
 
     private BannerRenderer2D() {}
 
     public static BufferedImage render(BannerDefinition def) {
         BufferedImage base = BannerTextures.base();
-
         if (base != null) {
             return renderWithTextures(def, base);
         }
         return renderGeometricFallback(def);
     }
 
-    // ---------- Real-texture rendering ----------
-
     private static BufferedImage renderWithTextures(BannerDefinition def, BufferedImage baseTex) {
-        int w = baseTex.getWidth();
-        int h = baseTex.getHeight();
+        int srcW = baseTex.getWidth();
+        int srcH = baseTex.getHeight();
 
-        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        BufferedImage out = new BufferedImage(RENDER_WIDTH, RENDER_HEIGHT, BufferedImage.TYPE_INT_ARGB);
 
+        // Base layer
         int baseRgb = DyeColorHelper.rgb(def.baseColor());
-        for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
-                int src = baseTex.getRGB(x, y);
+        for (int y = 0; y < RENDER_HEIGHT; y++) {
+            int sy = (y * srcH) / RENDER_HEIGHT;
+            for (int x = 0; x < RENDER_WIDTH; x++) {
+                int sx = (x * srcW) / RENDER_WIDTH;
+                int src = baseTex.getRGB(sx, sy);
                 out.setRGB(x, y, tint(src, baseRgb));
             }
         }
 
+        // Pattern layers
         for (BannerLayer layer : def.layers()) {
             BufferedImage pat = BannerTextures.pattern(layer.patternId());
             if (pat == null) continue;
-            if (pat.getWidth() != w || pat.getHeight() != h) continue;
 
+            int patW = pat.getWidth();
+            int patH = pat.getHeight();
             int patRgb = DyeColorHelper.rgb(layer.color());
-            for (int y = 0; y < h; y++) {
-                for (int x = 0; x < w; x++) {
-                    int src = pat.getRGB(x, y);
+
+            for (int y = 0; y < RENDER_HEIGHT; y++) {
+                int sy = (y * patH) / RENDER_HEIGHT;
+                for (int x = 0; x < RENDER_WIDTH; x++) {
+                    int sx = (x * patW) / RENDER_WIDTH;
+                    int src = pat.getRGB(sx, sy);
                     int alpha = (src >>> 24) & 0xFF;
                     if (alpha == 0) continue;
 
@@ -90,13 +96,13 @@ public final class BannerRenderer2D {
         return 0xFF000000 | (nr << 16) | (ng << 8) | nb;
     }
 
-    // ---------- Geometric fallback (used if textures cannot be loaded) ----------
+    // ---------- Geometric fallback (if textures cannot be loaded) ----------
 
     private static BufferedImage renderGeometricFallback(BannerDefinition def) {
-        BufferedImage img = new BufferedImage(FALLBACK_WIDTH, FALLBACK_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+        BufferedImage img = new BufferedImage(RENDER_WIDTH, RENDER_HEIGHT, BufferedImage.TYPE_INT_ARGB);
         int baseArgb = 0xFF000000 | DyeColorHelper.rgb(def.baseColor());
-        for (int y = 0; y < FALLBACK_HEIGHT; y++)
-            for (int x = 0; x < FALLBACK_WIDTH; x++)
+        for (int y = 0; y < RENDER_HEIGHT; y++)
+            for (int x = 0; x < RENDER_WIDTH; x++)
                 img.setRGB(x, y, baseArgb);
 
         for (BannerLayer layer : def.layers()) {
@@ -107,10 +113,9 @@ public final class BannerRenderer2D {
     }
 
     private static void drawGeometric(BufferedImage img, String p, int argb) {
-        int w = FALLBACK_WIDTH, h = FALLBACK_HEIGHT;
-        for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
-                if (geomMatch(p, x, y, w, h)) img.setRGB(x, y, argb);
+        for (int y = 0; y < RENDER_HEIGHT; y++) {
+            for (int x = 0; x < RENDER_WIDTH; x++) {
+                if (geomMatch(p, x, y, RENDER_WIDTH, RENDER_HEIGHT)) img.setRGB(x, y, argb);
             }
         }
     }
@@ -127,8 +132,8 @@ public final class BannerRenderer2D {
             case "small_stripes":    return ((x / 3) % 2) == 0;
             case "cross":            return Math.abs(fx - 0.5) <= 0.16 || Math.abs(fy - 0.5) <= 0.16;
             case "straight_cross":   return Math.abs(fx - 0.5) <= 0.08 || Math.abs(fy - 0.5) <= 0.08;
-            case "triangle_bottom":  return fy >= 0.5 && fy >= Math.abs(fx - 0.5) * 2 + 0.5;
-            case "triangle_top":     return fy <= 0.5 && (1 - fy) >= Math.abs(fx - 0.5) * 2 + 0.5;
+            case "triangle_bottom":  return fy >= 0.5;
+            case "triangle_top":     return fy <= 0.5;
             case "diagonal_left":    return Math.abs(fy - (1 - fx)) < 0.12;
             case "diagonal_right":   return Math.abs(fy - fx) < 0.12;
             case "circle":           return Math.hypot(fx - 0.5, fy - 0.5) <= 0.32;
